@@ -46,8 +46,6 @@
   (define load-libc
     (load-shared-object "libc.so.6"))
 
-  (define-ftype addr void*)
-
   (c_funcs
    ;; int open(const char* pathname, int flags);
    (open	(string int)				int)
@@ -56,9 +54,9 @@
    ;; void* mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset);
    ;;   NB: offset should be off_t but Chez ftypes doesn't define it. GLIBC's unistd.h in its description
    ;;   of type sizes groups pointer and off_t together, as at 2019 anyway, so use pointer instead.
-   (mmap	(void* size_t int int int ptrdiff_t)	addr)
+   (mmap	(void* size_t int int int ptrdiff_t)	void*)
    ;; int munmap(void* addr, size_t length);
-   (munmap	(addr size_t)				int))
+   (munmap	(void* size_t)				int))
 
   ;; internal: ftype pointer to our mmap'd memory.
   (define gpio-memory #f)
