@@ -2,6 +2,9 @@
 ;;
 ;; Copyright (c) 2019 Akce. MIT licensed.
 ;;
+;; NOTE: DEPRECATED!
+;; NOTE: GPIO sysfs has been replaced by a GPIO character device interface. Use that instead.
+;;
 ;; This is an attempt at a pure Chez implementation of GPIO control functions for a Raspberry Pi under a Raspbian based OS.
 ;;
 ;; Currently only BCM GPIO pin numbering is supported.
@@ -30,7 +33,7 @@
 ;;
 ;;   Background for /dev/gpiomem
 
-(library (rpi gpio)
+(library (rpi gpiomem)
   (export
    gpio-open gpio-close
    gpio-function-select
