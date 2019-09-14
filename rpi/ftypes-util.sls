@@ -5,7 +5,7 @@
    u8 u8* u8**
    alloc
    c_funcs
-   enum
+   bitmap enum
    locate-library-object
    ;; byte/string array handling functions.
    u8*->string u8**->string-list
@@ -72,6 +72,11 @@
           (define name
             (foreign-procedure (unsyntax (symbol->curses-name (syntax->datum #'name))) args return)))]
         [(_ f ...) (syntax (begin (c_funcs f) ...))])))
+
+  (define-syntax bitmap
+    (syntax-rules ()
+      [(_ name (symbol bit) ...)
+       (begin (define symbol (fxsll 1 bit)) ...)]))
 
   (define-syntax enum
     (syntax-rules ()
