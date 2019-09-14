@@ -23,10 +23,14 @@
    make-gpiohandle-data free-gpiohandle-data
    gpio-get-linehandle
    gpio-get gpio-set!
+   gpio-event-watch gpio-read-event
+   close
 
-   GPIO_HANDLE_REQUEST_INPUT GPIO_HANDLE_REQUEST_OUTPUT GPIO_HANDLE_REQUEST_ACTIVE_LOW GPIO_HANDLE_REQUEST_OPEN_DRAIN GPIO_HANDLE_REQUEST_OPEN_SOURCE)
+   GPIO_HANDLE_REQUEST_INPUT GPIO_HANDLE_REQUEST_OUTPUT GPIO_HANDLE_REQUEST_ACTIVE_LOW GPIO_HANDLE_REQUEST_OPEN_DRAIN GPIO_HANDLE_REQUEST_OPEN_SOURCE
+
+   GPIO_EVENT_REQUEST_RISING_EDGE GPIO_EVENT_REQUEST_FALLING_EDGE GPIO_EVENT_REQUEST_BOTH_EDGES)
   (import
-   (chezscheme)
+   (except (chezscheme) read)
    (rpi ftypes-util))
 
   (define load-libc
@@ -38,7 +42,9 @@
    ;; int close(int fd);
    (close	(int)					int)
    ;; int ioctl(int fd, unsigned long request, void* argp);
-   (ioctl	(int unsigned-long void*)		int))
+   (ioctl	(int unsigned-long void*)		int)
+   ;; ssize_t read(int fd, void *buf, size_t count);
+   (read	(int (* gpioevent-data) size_t)		ssize_t))
 
   (define O_RDRW	2)
   (define O_SYNC	#x101000)
@@ -103,8 +109,8 @@
 
   ;; GPIO event types.
   (enum gpio-event-event
-    [GPIO_EVENT_EVENT_RISING_EDGE	#x01]
-    [GPIO_EVENT_EVENT_FALLING_EDGE	#x02])
+    [GPIOEVENT_EVENT_RISING_EDGE	#x01]
+    [GPIOEVENT_EVENT_FALLING_EDGE	#x02])
 
   (define-ftype gpioevent-data
     (struct
@@ -232,4 +238,29 @@
     (lambda (line-handle . line-values)
       (alloc ([data &data gpiohandle-data])
         (u8*64-set! &data line-values)
-        (ioctl line-handle GPIOHANDLE_SET_LINE_VALUES_IOCTL data)))))
+        (ioctl line-handle GPIOHANDLE_SET_LINE_VALUES_IOCTL data))))
+
+  (define gpio-event-watch
+    (lambda (chip-fd line handleflags eventflags consumer-label)
+      (alloc ([data &data gpioevent-request])
+        (ftype-set! gpioevent-request (line-offset) &data line)
+        (ftype-set! gpioevent-request (handle-flags) &data handleflags)
+        (ftype-set! gpioevent-request (event-flags) &data eventflags)
+        (strcpy (ftype-&ref gpioevent-request (consumer-label) &data) consumer-label)
+        (ioctl chip-fd GPIO_GET_LINEEVENT_IOCTL data)
+        (ftype-ref gpioevent-request (fd) &data))))
+
+  (define event-id->symbol
+    (lambda (id)
+      (cond
+       [(fx=? id GPIOEVENT_EVENT_RISING_EDGE)	'RISING_EDGE]
+       [(fx=? id GPIOEVENT_EVENT_FALLING_EDGE)	'FALLING_EDGE]
+       [else	'UNKNOWN])))
+
+  (define gpio-read-event
+    (lambda (event-fd)
+      (alloc ([data &data gpioevent-data])
+        (read event-fd &data (ftype-sizeof gpioevent-data))
+        (values
+         (ftype-ref gpioevent-data (timestamp) &data)	; timestamp is in nanoseconds.
+         (event-id->symbol (ftype-ref gpioevent-data (id) &data)))))))
