@@ -241,12 +241,12 @@
         (ioctl line-handle GPIOHANDLE_SET_LINE_VALUES_IOCTL data))))
 
   (define gpio-event-watch
-    (lambda (chip-fd line handleflags eventflags consumer-label)
+    (lambda (chip-fd label lineflags eventflags line)
       (alloc ([data &data gpioevent-request])
         (ftype-set! gpioevent-request (line-offset) &data line)
-        (ftype-set! gpioevent-request (handle-flags) &data handleflags)
+        (ftype-set! gpioevent-request (handle-flags) &data lineflags)
         (ftype-set! gpioevent-request (event-flags) &data eventflags)
-        (strcpy (ftype-&ref gpioevent-request (consumer-label) &data) consumer-label)
+        (strcpy (ftype-&ref gpioevent-request (consumer-label) &data) label)
         (ioctl chip-fd GPIO_GET_LINEEVENT_IOCTL data)
         (ftype-ref gpioevent-request (fd) &data))))
 
@@ -261,6 +261,6 @@
     (lambda (event-fd)
       (alloc ([data &data gpioevent-data])
         (read event-fd &data (ftype-sizeof gpioevent-data))
-        (values
+        (list
          (ftype-ref gpioevent-data (timestamp) &data)	; timestamp is in nanoseconds.
          (event-id->symbol (ftype-ref gpioevent-data (id) &data)))))))
