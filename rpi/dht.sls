@@ -3,19 +3,18 @@
 ;; Written by Akce 2019.
 ;;
 ;; Abandon.
-;; Half the readings are missed on my rpi2 in dht-read between setting RUN mode and the call to read-temperature-humidity.
+;; The first few bits are missed on my rpi2 in dht-read between setting RUN mode and the call to read-temperature-humidity.
 ;; To fix, gpio line fd's would probably need to be bi-directional. That would also simplify this code greatly.
 ;;
-;; Keep for now as an example of how to use the GPIO chardev interface.
+;; Keep for now as an example of how to use the GPIO chardev interface. At the least it can get the temperature.. Some of the time..
 (library (rpi dht)
   (export
-   edges->time-splits
-   time-splits->bits
    dht-open dht-close dht-read
    dht-label
    dht-start-duration)
   (import
    (chezscheme)
+   (rpi dht-common)
    (rpi ftypes-util)
    (rpi gpio)
    (rpi poll))
@@ -49,6 +48,21 @@
     (lambda (dht-fd)
       (close dht-fd)))
 
+  ;; [procedure] dht-read: read temperature & humidity from DHT sensor.
+  ;; [return] (dht-fd . (temperature . humidity))
+  (define dht-read
+    (lambda (chip-fd dht-fd line)
+      (with-interrupts-disabled
+       ;; Enter RUNNING state: response from the DHT should be within 20-40us.
+       (set-RUNNING-state! dht-fd)
+       ;; The GPIO must be re-opened in INPUT mode, then we can receive measurements from the DHT device.
+       (close dht-fd)
+       ;; Watch FALLING_EDGE only as we seem to catch more of those than RISING_EDGE.
+       (let ([fd (gpio-event-watch chip-fd (dht-label) GPIO_HANDLE_REQUEST_INPUT GPIO_EVENT_REQUEST_FALLING_EDGE line)])
+         (let ([readings (read-temperature-humidity fd)])
+           (close fd)
+           (values (set-WAIT-state! chip-fd line) readings))))))
+
   ;; Transition DHT from WAIT to RUNNING mode.
   ;; ie, Send start signal - LO for at least 1ms.
   ;; MCU -> DHT start protocol is described in the datasheet: pg5-7.
@@ -70,57 +84,7 @@
              [(fx>? res 0)	; data waiting to be read from fd.
               (loop (cons (gpio-read-event fd) rs))]
              [(zero? res)	; timeout: finished.
-              (parse-data rs)]
+              (parse-data (reverse rs))]
              [else		; error
               (display "read-data error\n")]))))))
-
-  (define parse-data
-    (lambda (data)
-      (time-splits->bits (edges->time-splits data))))
-
-  (define time-splits->bits
-    (lambda (splits)
-      ;; Sensor response:
-      ;;  * HI 20-40us
-      ;;  * LO 80us
-      ;;  * HI 80us
-      ;; So when watching only one EDGE type: 80us + 80us = 160us roughly.
-      ;; Bit protocol:
-      ;;  * Start transmit = LO 50us
-      ;;  * Bit 0 = HI 26-28us
-      ;;  * Bit 1 = HI 70us
-      ;; So for one EDGE type: 0 = 50 + 28us, 1 = 50 + 70us roughly.
-      (map
-       (lambda (x)
-         (if (fx<? x 82000) 0 1))
-       ;; TODO filter out leading sensor response.
-       splits)))
-
-  (define edges->time-splits
-    (lambda (rdata)
-      (let loop ([rs (cdr rdata)] [odd (car rdata)] [splits '()])
-        (cond
-         [(null? rs)
-          (when odd
-            (display "warning: at least one missing reading..."))
-          splits]
-         [(pair? odd)	; Calculate time difference and push onto splits.
-          (loop (cdr rs) #f (cons (- (car odd) (car (car rs))) splits))]
-         [else
-          (loop (cdr rs) (car rs) splits)]))))
-
-  ;; [procedure] dht-read: read temperature & humidity from DHT sensor.
-  ;; [return] (dht-fd . (temperature . humidity))
-  (define dht-read
-    (lambda (chip-fd dht-fd line)
-      (with-interrupts-disabled
-       ;; Enter RUNNING state: response from the DHT should be within 20-40us.
-       (set-RUNNING-state! dht-fd)
-       ;; The GPIO must be re-opened in INPUT mode, then we can receive measurements from the DHT device.
-       (close dht-fd)
-       ;; Watch FALLING_EDGE only as we seem to catch more of those than RISING_EDGE.
-       (let ([fd (gpio-event-watch chip-fd (dht-label) GPIO_HANDLE_REQUEST_INPUT GPIO_EVENT_REQUEST_FALLING_EDGE line)])
-         (let ([readings (read-temperature-humidity fd)])
-           (close fd)
-           (values (set-WAIT-state! chip-fd line) readings))))))
   )
