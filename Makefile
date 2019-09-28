@@ -24,7 +24,8 @@ COBJS = rpi/dht.o
 
 BINS = rpi/libdht.so
 
-SOBJS = rpi/ftypes-util.so rpi/cdht.so rpi/dht-common.so rpi/dht.so rpi/gpio.so rpi/gpiomem.so rpi/poll.so
+# Libs need to go first or else there can be 'different compilation instance' exceptions.
+SOBJS = rpi/ftypes-util.so rpi/dht-common.so rpi/poll.so rpi/cdht.so rpi/dht.so rpi/gpio.so rpi/gpiomem.so
 
 all: $(BINS) $(SOBJS)
 
@@ -38,7 +39,7 @@ rpi/libdht.so: $(COBJS)
 	echo '(reset-handler abort) (compile-library "'$<'")' | $(SCHEME) $(SFLAGS)
 
 install: all
-	$(INSTALL) -D -t $(DEST)/rpi $(BINS) $(SOBJS)
+	$(INSTALL) -D -p -t $(DEST)/rpi $(BINS) $(SOBJS)
 
 clean:
 	rm -f $(COBJS) $(SOBJS) $(BINS)
